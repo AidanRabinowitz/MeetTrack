@@ -290,7 +290,7 @@ const testimonials = [
 ];
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
@@ -306,11 +306,23 @@ export default function Home() {
             </div>
             <nav className="flex items-center space-x-2 sm:space-x-4">
               {user ? (
-                <Link to="/dashboard">
-                  <Button className="bg-red-600 hover:bg-red-700 text-white text-sm sm:text-base px-3 sm:px-4 py-2">
-                    Dashboard
+                <>
+                  <Link to="/dashboard">
+                    <Button className="bg-red-600 hover:bg-red-700 text-white text-sm sm:text-base px-3 sm:px-4 py-2">
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    className="text-gray-700 border-gray-300 hover:bg-gray-100 text-sm sm:text-base px-3 sm:px-4 py-2"
+                    onClick={async () => {
+                      await signOut();
+                      window.location.href = "/";
+                    }}
+                  >
+                    Log Out
                   </Button>
-                </Link>
+                </>
               ) : (
                 <div className="flex space-x-2">
                   <Link to="/login">
@@ -494,10 +506,10 @@ export default function Home() {
         </div>
       </section> */}
       {/* Support Section */}
-      <section   
-                id="support"
-                className="py-16 sm:py-20 px-4 bg-gradient-to-br from-gray-50 to-gray-100">
-        
+      <section
+        id="support"
+        className="py-16 sm:py-20 px-4 bg-gradient-to-br from-gray-50 to-gray-100">
+
         <div className="container mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold mb-6 text-gray-900">

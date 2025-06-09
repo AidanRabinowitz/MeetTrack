@@ -55,7 +55,7 @@ export default function SignUpForm() {
       await signUp(email, password, fullName);
       toast({
         title: "Account created successfully",
-        description: "Please check your email to verify your account.",
+        description: "Please check your email to verify your account before signing in.",
         variant: "default",
       });
       navigate("/login");
@@ -64,18 +64,7 @@ export default function SignUpForm() {
 
       // Handle specific error cases
       if (error?.message) {
-        if (
-          error.message.includes("already exists") ||
-          error.message.includes("already registered")
-        ) {
-          message = "An account already exists with that email.";
-        } else if (error.message.includes("invalid email")) {
-          message = "Please enter a valid email address.";
-        } else if (error.message.includes("weak password")) {
-          message = "Password is too weak. Please choose a stronger password.";
-        } else {
-          message = error.message;
-        }
+        message = error.message;
       }
 
       setError(message);

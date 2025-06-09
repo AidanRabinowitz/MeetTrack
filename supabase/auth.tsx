@@ -25,16 +25,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("users")
-        .select("*")
+        .select("id, email, full_name, created_at, updated_at")
         .eq("id", userId)
         .maybeSingle();
 
-      if (error) {
+      if (error && error.code !== "PGRST116") {
         console.error("Database error fetching user profile:", error.message);
         return null;
       }
@@ -50,36 +51,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserProfile(session.user.id).then(setUserProfile);
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Error getting session:", error.message);
+        }
+
+        if (mounted) {
+          setUser(session?.user ?? null);
+          if (session?.user) {
+            const profile = await fetchUserProfile(session.user.id);
+            setUserProfile(profile);
+          }
+          setLoading(false);
+          setInitializing(false);
+        }
+      } catch (err: any) {
+        console.error("Error initializing auth:", err.message);
+        if (mounted) {
+          setLoading(false);
+          setInitializing(false);
+        }
       }
-      setLoading(false);
-    });
+    };
+
+    initializeAuth();
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const profile = await fetchUserProfile(session.user.id);
-        setUserProfile(profile);
-      } else {
-        setUserProfile(null);
+      if (!mounted) return;
+
+      try {
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          const profile = await fetchUserProfile(session.user.id);
+          setUserProfile(profile);
+        } else {
+          setUserProfile(null);
+        }
+        
+        if (initializing) {
+          setInitializing(false);
+        }
+        setLoading(false);
+      } catch (err: any) {
+        console.error("Error in auth state change:", err.message);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [initializing]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // Sign up with Supabase Auth - triggers will handle profile creation
+      // Check if user already exists in auth.users
+      const { data: existingUser } = await supabase.auth.admin.getUserByEmail(email).catch(() => ({ data: null }));
+      
+      if (existingUser?.user) {
+        throw new Error("An account already exists with that email address.");
+      }
+
+      // Sign up with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -91,26 +136,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        // Handle duplicate user error specifically
+        // Handle specific error cases
         if (
           error.message.includes("already registered") ||
-          error.message.includes("already exists")
+          error.message.includes("already exists") ||
+          error.message.includes("User already registered")
         ) {
-          throw new Error("An account already exists with that email.");
+          throw new Error("An account already exists with that email address.");
+        }
+        if (error.message.includes("invalid email")) {
+          throw new Error("Please enter a valid email address.");
+        }
+        if (error.message.includes("weak password")) {
+          throw new Error("Password is too weak. Please choose a stronger password.");
         }
         throw error;
       }
 
-      console.log("User signup successful");
-
-      // If email confirmation is required, user won't be logged in until they confirm
+      // Success - user created
       if (data.user && !data.user.email_confirmed_at) {
-        console.log("User created - please check email for confirmation link");
-      } else if (data.user && data.user.email_confirmed_at) {
-        console.log("User created and confirmed");
+        // Email confirmation required
+        return;
       }
     } catch (error: any) {
-      console.error("SignUp failed:", error.message || "Unknown error");
       throw error;
     } finally {
       setLoading(false);
@@ -126,13 +174,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        console.error("SignIn error:", error.message);
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please check your credentials and try again.");
+        }
+        if (error.message.includes("Email not confirmed")) {
+          throw new Error("Please check your email and click the confirmation link before signing in.");
+        }
         throw error;
       }
 
-      console.log("User signin successful");
+      // Success - user will be set via onAuthStateChange
+      return;
     } catch (error: any) {
-      console.error("SignIn failed:", error.message || "Unknown error");
       throw error;
     } finally {
       setLoading(false);
@@ -142,10 +195,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // Clear local state first for immediate UI feedback
       setUser(null);
       setUserProfile(null);
+      
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Sign out error:", error.message);
+        // Don't throw here - user state is already cleared
+      }
+    } catch (error: any) {
+      console.error("Unexpected sign out error:", error.message);
     } finally {
       setLoading(false);
     }

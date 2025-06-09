@@ -11,7 +11,85 @@ import SettingsPage from "./SettingsPage";
 import HelpContactForm from "./HelpContactForm";
 import { PowerliftingProvider } from "../../contexts/PowerliftingContext";
 
-const Dashboard = () => {
+// Loading timeout component
+function LoadingTimeoutWrapper({ children }: { children: React.ReactNode }) {
+  const { loading, error, refreshData } = usePowerlifting();
+  const [showTimeout, setShowTimeout] = useState(false);
+
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setShowTimeout(true);
+      }, 15000); // Show timeout after 15 seconds
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowTimeout(false);
+    }
+  }, [loading]);
+
+  if (loading && showTimeout) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">
+            Loading is taking longer than expected
+          </h2>
+          <p className="text-gray-400 mb-6">
+            There might be a connection issue. You can try refreshing the data or check your internet connection.
+          </p>
+          <div className="space-y-3">
+            <Button
+              onClick={() => {
+                setShowTimeout(false);
+                refreshData();
+              }}
+              className="w-full bg-red-600 hover:bg-red-700"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry Loading
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.location.reload()}
+              className="w-full border-gray-600 text-gray-300 hover:bg-gray-800"
+            >
+              Refresh Page
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">
+            Something went wrong
+          </h2>
+          <p className="text-gray-400 mb-6">
+            {error}
+          </p>
+          <Button
+            onClick={() => refreshData()}
+            className="w-full bg-red-600 hover:bg-red-700"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function DashboardContent() {
   const [activeView, setActiveView] = useState("dashboard");
   const [helpFormOpen, setHelpFormOpen] = useState(false);
 
@@ -45,7 +123,7 @@ const Dashboard = () => {
   };
 
   return (
-    <PowerliftingProvider>
+    <LoadingTimeoutWrapper>
       <div className="min-h-screen bg-gray-900">
         <TopNavigation onSettingsClick={() => setActiveView("settings")} />
 
@@ -59,6 +137,14 @@ const Dashboard = () => {
 
         <HelpContactForm open={helpFormOpen} onOpenChange={setHelpFormOpen} />
       </div>
+    </LoadingTimeoutWrapper>
+  );
+}
+
+const Dashboard = () => {
+  return (
+    <PowerliftingProvider>
+      <DashboardContent />
     </PowerliftingProvider>
   );
 };

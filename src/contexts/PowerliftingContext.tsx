@@ -160,14 +160,34 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  // Debug logging function
-  const debugLog = (message: string, data?: any, p0?: string) => {
-    console.log(`[PowerliftingContext] ${message}`, data || "");
+  // Debug logging function - no sensitive data
+  const debugLog = (message: string, data?: any) => {
+    if (process.env.NODE_ENV === "development") {
+      // Only log non-sensitive information
+      if (typeof data === "object" && data !== null) {
+        // Filter out sensitive fields
+        const sanitizedData = Object.keys(data).reduce((acc, key) => {
+          if (!["id", "user_id", "email"].includes(key)) {
+            acc[key] = data[key];
+          }
+          return acc;
+        }, {} as any);
+        console.log(
+          `[PowerliftingContext] ${message}`,
+          Object.keys(sanitizedData).length > 0 ? sanitizedData : "",
+        );
+      } else {
+        console.log(`[PowerliftingContext] ${message}`);
+      }
+    }
   };
 
-  // Error logging function
+  // Error logging function - no sensitive data
   const errorLog = (message: string, error: any) => {
-    console.error(`[PowerliftingContext] ${message}`, error);
+    console.error(
+      `[PowerliftingContext] ${message}:`,
+      error?.message || "Unknown error",
+    );
     setError(message);
   };
 
@@ -182,7 +202,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       setError(null);
-      debugLog("Fetching user data for user:", user.id);
+      debugLog("Fetching user data...");
 
       // Fetch user settings
       debugLog("Fetching user settings...");
@@ -194,10 +214,14 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
 
       if (settingsError && settingsError.code !== "PGRST116") {
         errorLog("Error fetching user settings", settingsError);
+        throw new Error(
+          `Failed to fetch user settings: ${settingsError.message}`,
+        );
       }
-      debugLog("User settings fetched:", userSettings);
+      debugLog("User settings fetched successfully");
 
       // Initialize default settings if none exist
+      let finalUserSettings = userSettings;
       if (!userSettings) {
         debugLog("No user settings found, creating defaults...");
         const defaultSettings: Partial<UserSettings> = {
@@ -215,8 +239,11 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
 
         if (createError) {
           errorLog("Error creating default settings", createError);
+          // Continue with defaults even if creation fails
+          finalUserSettings = defaultSettings as UserSettings;
         } else {
-          debugLog("Default settings created:", newSettings);
+          debugLog("Default settings created successfully");
+          finalUserSettings = newSettings;
         }
       }
 
@@ -228,11 +255,11 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (statsError) {
+      if (statsError && statsError.code !== "PGRST116") {
         errorLog("Error fetching current stats", statsError);
         throw new Error(`Failed to fetch current stats: ${statsError.message}`);
       }
-      debugLog("Current stats fetched:", currentStatsData);
+      debugLog("Current stats fetched successfully");
 
       // Fetch active meet
       debugLog("Fetching active meet...");
@@ -243,11 +270,11 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         .eq("is_active", true)
         .maybeSingle();
 
-      if (meetError) {
+      if (meetError && meetError.code !== "PGRST116") {
         errorLog("Error fetching meet data", meetError);
         throw new Error(`Failed to fetch meet data: ${meetError.message}`);
       }
-      debugLog("Meet data fetched:", meetData);
+      debugLog("Meet data fetched successfully");
 
       // Fetch meet goals
       debugLog("Fetching meet goals...");
@@ -257,11 +284,11 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         .eq("user_id", user.id)
         .eq("meet_id", meetData?.id || "00000000-0000-0000-0000-000000000000");
 
-      if (goalsError) {
+      if (goalsError && goalsError.code !== "PGRST116") {
         errorLog("Error fetching meet goals", goalsError);
         throw new Error(`Failed to fetch meet goals: ${goalsError.message}`);
       }
-      debugLog("Meet goals fetched:", meetGoalsData);
+      debugLog("Meet goals fetched successfully");
 
       // Fetch weight history
       debugLog("Fetching weight history...");
@@ -272,13 +299,13 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         .order("date", { ascending: false })
         .limit(30);
 
-      if (weightError) {
+      if (weightError && weightError.code !== "PGRST116") {
         errorLog("Error fetching weight history", weightError);
         throw new Error(
           `Failed to fetch weight history: ${weightError.message}`,
         );
       }
-      debugLog("Weight history fetched:", weightHistoryData);
+      debugLog("Weight history fetched successfully");
 
       // Fetch equipment checklist
       debugLog("Fetching equipment checklist...");
@@ -287,24 +314,35 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         .select("*")
         .eq("user_id", user.id);
 
-      if (equipmentError) {
+      if (equipmentError && equipmentError.code !== "PGRST116") {
         errorLog("Error fetching equipment checklist", equipmentError);
         throw new Error(
           `Failed to fetch equipment checklist: ${equipmentError.message}`,
         );
       }
-      debugLog("Equipment checklist fetched:", equipmentData);
+      debugLog("Equipment checklist fetched successfully");
 
       // Initialize default equipment if none exists
+      let finalEquipmentData = equipmentData;
       if (!equipmentData || equipmentData.length === 0) {
         debugLog("No equipment found, initializing defaults...");
-        await initializeDefaultEquipment();
-        // Refetch equipment after initialization
-        const { data: newEquipmentData } = await supabase
-          .from("equipment_checklist")
-          .select("*")
-          .eq("user_id", user.id);
-        debugLog("Default equipment initialized:", newEquipmentData);
+        try {
+          await initializeDefaultEquipment();
+          // Refetch equipment after initialization
+          const { data: newEquipmentData } = await supabase
+            .from("equipment_checklist")
+            .select("*")
+            .eq("user_id", user.id);
+          finalEquipmentData = newEquipmentData;
+          debugLog("Default equipment initialized successfully");
+        } catch (equipmentInitError) {
+          errorLog(
+            "Failed to initialize default equipment",
+            equipmentInitError,
+          );
+          // Continue with default equipment from constants
+          finalEquipmentData = [];
+        }
       }
 
       // Transform and set data
@@ -327,19 +365,19 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
           : initialState.currentStats,
         meetGoals: transformMeetGoalsFromDB(meetGoalsData || []),
         equipmentChecklist:
-          equipmentData?.length > 0
-            ? transformEquipmentFromDB(equipmentData)
+          finalEquipmentData?.length > 0
+            ? transformEquipmentFromDB(finalEquipmentData)
             : DEFAULT_EQUIPMENT,
         weightHistory:
           weightHistoryData?.map((entry) => ({
             date: entry.date,
             weight: entry.weight,
           })) || [],
-        unitPreference: userSettings?.weight_unit || "kg",
-        userSettings: userSettings || undefined,
+        unitPreference: finalUserSettings?.weight_unit || "kg",
+        userSettings: finalUserSettings || undefined,
       };
 
-      debugLog("Successfully fetched user data:", newState);
+      debugLog("Successfully fetched and loaded user data");
       dispatch({ type: "LOAD_STATE", payload: newState });
     } catch (err: any) {
       errorLog("Error fetching user data", err);
@@ -491,7 +529,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Saving current stats:", stats);
+      debugLog("Saving current stats...");
 
       // First try to update existing record
       const { error: updateError } = await supabase
@@ -541,7 +579,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Saving meet goals:", goals);
+      debugLog("Saving meet goals...");
 
       // Get active meet ID
       const { data: meetData } = await supabase
@@ -594,7 +632,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Saving meet info:", info);
+      debugLog("Saving meet info...");
       const { error } = await supabase.from("meets").upsert({
         user_id: user.id,
         meet_name: info.meetName || "",
@@ -624,7 +662,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Adding weight entry:", entry);
+      debugLog("Adding weight entry...");
       const { error } = await supabase.from("weight_history").insert({
         user_id: user.id,
         weight: entry.weight,
@@ -650,7 +688,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Toggling equipment item:", itemId);
+      debugLog("Toggling equipment item...");
       const item = state.equipmentChecklist.find((item) => item.id === itemId);
       if (!item) {
         throw new Error("Equipment item not found");
@@ -681,7 +719,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Updating current weight:", weight);
+      debugLog("Updating current weight...");
 
       const updatedStats = {
         ...state.currentStats,
@@ -709,7 +747,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Saving user settings:", settings);
+      debugLog("Saving user settings...");
 
       // Optimistic update for immediate UI feedback
       const currentSettings = state.userSettings || {
@@ -790,7 +828,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Adding training entry:", entry);
+      debugLog("Adding training entry...");
       const { error } = await supabase.from("training_history").insert({
         user_id: user.id,
         lift_type: entry.lift_type,
@@ -822,7 +860,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Fetching training history for last", days, "days");
+      debugLog(`Fetching training history for last ${days} days...`);
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
@@ -837,7 +875,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         throw new Error(`Failed to fetch training history: ${error.message}`);
       }
 
-      debugLog("Successfully fetched training history:", data);
+      debugLog("Successfully fetched training history");
       return data || [];
     } catch (err: any) {
       errorLog("Error fetching training history", err);
@@ -859,7 +897,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Fetching training analytics for last", days, "days");
+      debugLog(`Fetching training analytics for last ${days} days...`);
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
@@ -874,7 +912,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         throw new Error(`Failed to fetch training analytics: ${error.message}`);
       }
 
-      debugLog("Successfully fetched training analytics data:", data);
+      debugLog("Successfully fetched training analytics data");
 
       // Process data for analytics
       const entries = data || [];

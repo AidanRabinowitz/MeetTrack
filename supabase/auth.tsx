@@ -32,16 +32,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("users")
         .select("*")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        console.error("Error fetching profile:", error);
+        console.error("Database error fetching user profile:", error.message);
         return null;
       }
 
       return data;
-    } catch (err) {
-      console.error("Unexpected error fetching profile:", err);
+    } catch (err: any) {
+      console.error(
+        "Unexpected error fetching user profile:",
+        err.message || "Unknown error",
+      );
       return null;
     }
   };
@@ -57,7 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         const profile = await fetchUserProfile(session.user.id);
@@ -86,21 +91,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        console.error("Signup error:", error);
+        // Handle duplicate user error specifically
+        if (
+          error.message.includes("already registered") ||
+          error.message.includes("already exists")
+        ) {
+          throw new Error("An account already exists with that email.");
+        }
         throw error;
       }
 
-      console.log("User signup successful:", data);
-      
+      console.log("User signup successful");
+
       // If email confirmation is required, user won't be logged in until they confirm
       if (data.user && !data.user.email_confirmed_at) {
         console.log("User created - please check email for confirmation link");
       } else if (data.user && data.user.email_confirmed_at) {
         console.log("User created and confirmed");
       }
-
-    } catch (error) {
-      console.error("SignUp failed:", error);
+    } catch (error: any) {
+      console.error("SignUp failed:", error.message || "Unknown error");
       throw error;
     } finally {
       setLoading(false);
@@ -116,14 +126,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        console.error("SignIn error:", error);
+        console.error("SignIn error:", error.message);
         throw error;
       }
 
-      console.log("User signin successful:", data);
-      
-    } catch (error) {
-      console.error("SignIn failed:", error);
+      console.log("User signin successful");
+    } catch (error: any) {
+      console.error("SignIn failed:", error.message || "Unknown error");
       throw error;
     } finally {
       setLoading(false);
@@ -143,7 +152,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ user, userProfile, loading, signIn, signUp, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );

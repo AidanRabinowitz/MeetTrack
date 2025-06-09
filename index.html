@@ -1,98 +1,76 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- SEO Meta Tags -->
-    <title>Meet Prep Tracker - Powerlifting Competition Preparation Tool</title>
-    <meta
-      name="description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day. Free beta version available now."
-    />
-    <meta
-      name="keywords"
-      content="powerlifting, meet prep, competition preparation, squat, bench press, deadlift, weight cutting, equipment checklist"
-    />
-    <meta name="author" content="Meet Prep Tracker" />
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Open Graph Meta Tags -->
-    <meta
-      property="og:title"
-      content="Meet Prep Tracker - Powerlifting Competition Preparation Tool"
-    />
-    <meta
-      property="og:description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day."
-    />
-    <meta property="og:type" content="website" />
-    <meta
-      property="og:url"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app"
-    />
-    <meta
-      property="og:image"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/tempo.jpg"
-    />
-    <meta property="og:site_name" content="Meet Prep Tracker" />
+  <!-- SEO Meta Tags -->
+  <title>Meet Prep Tracker - Powerlifting Competition Preparation Tool</title>
+  <meta name="description"
+    content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day. Free beta version available now." />
+  <meta name="keywords"
+    content="powerlifting, meet prep, competition preparation, squat, bench press, deadlift, weight cutting, equipment checklist" />
+  <meta name="author" content="Meet Prep Tracker" />
 
-    <!-- Twitter Card Meta Tags -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="Meet Prep Tracker - Powerlifting Competition Preparation Tool"
-    />
-    <meta
-      name="twitter:description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day."
-    />
-    <meta
-      name="twitter:image"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/tempo.jpg"
-    />
+  <!-- Open Graph Meta Tags -->
+  <meta property="og:title" content="Meet Prep Tracker - Powerlifting Competition Preparation Tool" />
+  <meta property="og:description"
+    content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app" />
+  <meta property="og:image" content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/favicon.png" />
+  <meta property="og:site_name" content="Meet Prep Tracker" />
 
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#dc2626" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <meta name="apple-mobile-web-app-title" content="Meet Prep Tracker" />
+  <!-- Twitter Card Meta Tags -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Meet Prep Tracker - Powerlifting Competition Preparation Tool" />
+  <meta name="twitter:description"
+    content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day." />
+  <meta name="twitter:image" content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/favicon.png" />
 
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#dc2626" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Meet Prep Tracker" />
 
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/tempo.jpg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/tempo.jpg" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/tempo.jpg" />
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
 
-    <!-- Preconnect to external domains -->
-    <link rel="preconnect" href="https://api.polar.sh" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-    <script src="https://api.tempolabs.ai/proxy-asset?url=https://storage.googleapis.com/tempo-public-assets/error-handling.js"></script>
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
 
-    <!-- PWA Service Worker Registration -->
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("/sw.js")
-            .then((registration) => {
-              console.log("SW registered: ", registration);
-            })
-            .catch((registrationError) => {
-              console.log("SW registration failed: ", registrationError);
-            });
-        });
-      }
-    </script>
-  </body>
+  <!-- Preconnect to external domains -->
+  <link rel="preconnect" href="https://api.polar.sh" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+  <script
+    src="https://api.tempolabs.ai/proxy-asset?url=https://storage.googleapis.com/tempo-public-assets/error-handling.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/sw.js")
+          .then((registration) => {
+            console.log("SW registered: ", registration);
+          })
+          .catch((registrationError) => {
+            console.log("SW registration failed: ", registrationError);
+          });
+      });
+    }
+  </script>
+</body>
+
 </html>

@@ -74,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // Just sign up - the database trigger will handle creating the profile
+      // Sign up with Supabase Auth - triggers will handle profile creation
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -92,9 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log("User signup successful:", data);
       
-      // Note: If email confirmation is required, the user won't be logged in immediately
+      // If email confirmation is required, user won't be logged in until they confirm
       if (data.user && !data.user.email_confirmed_at) {
-        console.log("User created but needs email confirmation");
+        console.log("User created - please check email for confirmation link");
+      } else if (data.user && data.user.email_confirmed_at) {
+        console.log("User created and confirmed");
       }
 
     } catch (error) {

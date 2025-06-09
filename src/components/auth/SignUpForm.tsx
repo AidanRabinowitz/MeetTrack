@@ -26,6 +26,31 @@ export default function SignUpForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(""); // Clear previous errors
+
+    // Client-side validation
+    if (!email || !password || !fullName) {
+      const message = "Please fill in all required fields.";
+      setError(message);
+      toast({
+        title: "Validation Error",
+        description: message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      const message = "Password must be at least 6 characters long.";
+      setError(message);
+      toast({
+        title: "Validation Error",
+        description: message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await signUp(email, password, fullName);
       toast({
@@ -35,7 +60,24 @@ export default function SignUpForm() {
       });
       navigate("/login");
     } catch (error: any) {
-      const message = error?.message || "Error creating account";
+      let message = "Error creating account";
+
+      // Handle specific error cases
+      if (error?.message) {
+        if (
+          error.message.includes("already exists") ||
+          error.message.includes("already registered")
+        ) {
+          message = "An account already exists with that email.";
+        } else if (error.message.includes("invalid email")) {
+          message = "Please enter a valid email address.";
+        } else if (error.message.includes("weak password")) {
+          message = "Password is too weak. Please choose a stronger password.";
+        } else {
+          message = error.message;
+        }
+      }
+
       setError(message);
       toast({
         title: "Sign up failed",
@@ -87,7 +129,11 @@ export default function SignUpForm() {
                 required
               />
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && (
+              <div className="p-3 rounded-md bg-red-50 border border-red-200">
+                <p className="text-sm text-red-600 font-medium">{error}</p>
+              </div>
+            )}
             <Button type="submit" className="w-full">
               Create account
             </Button>

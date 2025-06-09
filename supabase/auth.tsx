@@ -27,18 +27,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUserProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .single();
 
-    if (error) {
-      console.error("Error fetching profile:", error);
+      if (error) {
+        console.error("Error fetching profile:", error);
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      console.error("Unexpected error fetching profile:", err);
       return null;
     }
-
-    return data;
   };
 
   useEffect(() => {
@@ -69,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // 1. Sign up with Supabase Auth
+      // Just sign up - the database trigger will handle creating the profile
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -80,21 +85,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      if (error) throw error;
-
-      // 2. If user is created, add to public.users table
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from("users")
-          .upsert({
-            id: data.user.id,
-            email: data.user.email,
-            full_name: fullName,
-            updated_at: new Date().toISOString(),
-          });
-
-        if (profileError) throw profileError;
+      if (error) {
+        console.error("Signup error:", error);
+        throw error;
       }
+
+      console.log("User signup successful:", data);
+      
+      // Note: If email confirmation is required, the user won't be logged in immediately
+      if (data.user && !data.user.email_confirmed_at) {
+        console.log("User created but needs email confirmation");
+      }
+
+    } catch (error) {
+      console.error("SignUp failed:", error);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -108,26 +113,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
-      if (error) throw error;
-
-      // Ensure user exists in public.users table (backfill if needed)
-      if (data.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from("users")
-          .select("*")
-          .eq("id", data.user.id)
-          .single();
-
-        if (profileError || !profile) {
-          // Create profile if doesn't exist
-          await supabase.from("users").upsert({
-            id: data.user.id,
-            email: data.user.email,
-            full_name: data.user.user_metadata?.full_name || '',
-            updated_at: new Date().toISOString(),
-          });
-        }
+      if (error) {
+        console.error("SignIn error:", error);
+        throw error;
       }
+
+      console.log("User signin successful:", data);
+      
+    } catch (error) {
+      console.error("SignIn failed:", error);
+      throw error;
     } finally {
       setLoading(false);
     }

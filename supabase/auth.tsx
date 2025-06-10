@@ -25,142 +25,148 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initializing, setInitializing] = useState(true);
 
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
     try {
       const { data, error } = await supabase
         .from("users")
         .select("id, email, full_name, created_at, updated_at")
         .eq("id", userId)
-        .maybeSingle();
+        .single();
 
-      if (error && error.code !== "PGRST116") {
-        console.error("Database error fetching user profile:", error.message);
+      if (error) {
+        console.error("Error fetching user profile:", error);
         return null;
       }
 
       return data;
     } catch (err: any) {
-      console.error(
-        "Unexpected error fetching user profile:",
-        err.message || "Unknown error",
-      );
+      console.error("Unexpected error fetching user profile:", err);
+      return null;
+    }
+  };
+
+  const createUserProfile = async (user: User): Promise<UserProfile | null> => {
+    try {
+      const profileData = {
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('users')
+        .upsert(profileData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating user profile:", error);
+        return profileData;
+      }
+
+      return data;
+    } catch (err: any) {
+      console.error("Unexpected error creating user profile:", err);
       return null;
     }
   };
 
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  const initializeAuth = async () => {
-    try {
-      setLoading(true);
-      
-      // 1. Get session with retry logic
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
+    const initializeAuth = async () => {
+      try {
+        // Get the current session
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Session error:", error);
+          if (mounted) {
+            setUser(null);
+            setUserProfile(null);
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (session?.user && mounted) {
+          // Fetch or create user profile
+          let profile = await fetchUserProfile(session.user.id);
+          
+          if (!profile) {
+            profile = await createUserProfile(session.user);
+          }
+
+          if (mounted) {
+            setUser(session.user);
+            setUserProfile(profile);
+          }
+        } else if (mounted) {
+          setUser(null);
+          setUserProfile(null);
+        }
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+        if (mounted) {
+          setUser(null);
+          setUserProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Initialize auth
+    initializeAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
-      if (error) {
-        console.error("Session error:", error);
-        await supabase.auth.signOut();
+      console.log("Auth state change:", event, session?.user?.id);
+
+      if (event === 'SIGNED_OUT') {
         setUser(null);
         setUserProfile(null);
+        setLoading(false);
         return;
       }
 
-      // 2. Verify user exists in both tables
-      if (session?.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          setLoading(true);
+          
+          // Fetch or create user profile
+          let profile = await fetchUserProfile(session.user.id);
+          
+          if (!profile) {
+            profile = await createUserProfile(session.user);
+          }
 
-        if (profileError || !profile) {
-          // Auto-create profile if missing
-          const { error: upsertError } = await supabase.from('users').upsert({
-            id: session.user.id,
-            email: session.user.email,
-            full_name: session.user.user_metadata?.full_name || '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-
-          if (upsertError) throw upsertError;
+          if (mounted) {
+            setUser(session.user);
+            setUserProfile(profile);
+            setLoading(false);
+          }
         }
-
-        if (mounted) {
-          setUser(session.user);
-          setUserProfile(profile || {
-            id: session.user.id,
-            email: session.user.email,
-            full_name: session.user.user_metadata?.full_name || '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        }
-      } else if (mounted) {
-        setUser(null);
-        setUserProfile(null);
       }
-    } catch (err) {
-      console.error("Auth init error:", err);
-      if (mounted) {
-        setUser(null);
-        setUserProfile(null);
-      }
-      await supabase.auth.signOut();
-    } finally {
-      if (mounted) {
-        setLoading(false);
-        setInitializing(false);
-      }
-    }
-  };
+    });
 
-  initializeAuth();
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (!mounted) return;
-
-    // Handle specific events
-    if (event === 'SIGNED_OUT') {
-      setUser(null);
-      setUserProfile(null);
-      return;
-    }
-
-    if (session?.user) {
-      // Double-check profile existence
-      const { data: profile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      setUser(session.user);
-      setUserProfile(profile || {
-        id: session.user.id,
-        email: session.user.email,
-        full_name: session.user.user_metadata?.full_name || '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-    }
-  });
-
-  return () => {
-    mounted = false;
-    subscription?.unsubscribe();
-  };
-}, []);
+    // Cleanup function
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // Sign up with Supabase Auth - removed admin API call
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -172,30 +178,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        // Handle specific error cases
-        if (
-          error.message.includes("already registered") ||
-          error.message.includes("already exists") ||
-          error.message.includes("User already registered")
-        ) {
+        if (error.message.includes("already registered") || 
+            error.message.includes("already exists") ||
+            error.message.includes("User already registered")) {
           throw new Error("An account already exists with that email address.");
         }
         if (error.message.includes("invalid email")) {
           throw new Error("Please enter a valid email address.");
         }
         if (error.message.includes("weak password")) {
-          throw new Error(
-            "Password is too weak. Please choose a stronger password.",
-          );
+          throw new Error("Password is too weak. Please choose a stronger password.");
         }
         throw error;
       }
 
-      // Success - user created
-      if (data.user && !data.user.email_confirmed_at) {
-        // Email confirmation required
-        return;
-      }
+      // User created successfully
+      return;
     } catch (error: any) {
       throw error;
     } finally {
@@ -213,19 +211,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
-          throw new Error(
-            "Invalid email or password. Please check your credentials and try again.",
-          );
+          throw new Error("Invalid email or password. Please check your credentials and try again.");
         }
         if (error.message.includes("Email not confirmed")) {
-          throw new Error(
-            "Please check your email and click the confirmation link before signing in.",
-          );
+          throw new Error("Please check your email and click the confirmation link before signing in.");
         }
         throw error;
       }
 
-      // Success - user will be set via onAuthStateChange
+      // Success - auth state will be updated via onAuthStateChange
       return;
     } catch (error: any) {
       throw error;
@@ -235,27 +229,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-  setLoading(true);
-  try {
-    // Sign out from Supabase
-    const { error } = await supabase.auth.signOut({ scope: "global" });
-    
-    // Clear all browser storage
-    localStorage.clear();
-    sessionStorage.clear();
-    
-    // Clear Supabase client cache
-    await supabase.auth._removeSession();
-    
-    // Reset local state
-    setUser(null);
-    setUserProfile(null);
-  } catch (error) {
-    console.error("Sign out error:", error);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+    try {
+      // Sign out from Supabase (this will trigger SIGNED_OUT event)
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error("Sign out error:", error);
+      }
+
+      // Clear state (will also be handled by auth state change listener)
+      setUser(null);
+      setUserProfile(null);
+      
+    } catch (error) {
+      console.error("Sign out error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <AuthContext.Provider

@@ -201,6 +201,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setUserProfile(null);
 
+      // Clear localStorage to remove any cached auth tokens
+      try {
+        localStorage.clear();
+        // Also clear sessionStorage as a precaution
+        sessionStorage.clear();
+      } catch (storageError) {
+        console.warn("Error clearing storage:", storageError);
+      }
+
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error("Sign out error:", error.message);

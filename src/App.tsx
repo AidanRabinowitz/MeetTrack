@@ -15,6 +15,7 @@ import { Toaster } from "./components/ui/toaster";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import OfflineIndicator from "./components/common/OfflineIndicator";
 import PWAInstallPrompt from "./components/common/PWAInstallPrompt";
+import { AuthDebugInfo } from "./debug";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -67,6 +68,7 @@ function AppRoutes() {
 }
 
 function App() {
+  <AuthDebugInfo/>
   return (
     <ErrorBoundary>
       <BrowserRouter>

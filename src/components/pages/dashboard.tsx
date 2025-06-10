@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import TopNavigation from "../dashboard/layout/TopNavigation";
 import Sidebar from "../dashboard/layout/Sidebar";
 import PowerliftingDashboard from "../powerlifting/PowerliftingDashboard";
@@ -9,7 +11,10 @@ import EquipmentChecklist from "../powerlifting/EquipmentChecklist";
 import Analytics from "../powerlifting/Analytics";
 import SettingsPage from "./SettingsPage";
 import HelpContactForm from "./HelpContactForm";
-import { PowerliftingProvider } from "../../contexts/PowerliftingContext";
+import {
+  PowerliftingProvider,
+  usePowerlifting,
+} from "../../contexts/PowerliftingContext";
 
 // Loading timeout component
 function LoadingTimeoutWrapper({ children }: { children: React.ReactNode }) {
@@ -37,7 +42,8 @@ function LoadingTimeoutWrapper({ children }: { children: React.ReactNode }) {
             Loading is taking longer than expected
           </h2>
           <p className="text-gray-400 mb-6">
-            There might be a connection issue. You can try refreshing the data or check your internet connection.
+            There might be a connection issue. You can try refreshing the data
+            or check your internet connection.
           </p>
           <div className="space-y-3">
             <Button
@@ -71,9 +77,7 @@ function LoadingTimeoutWrapper({ children }: { children: React.ReactNode }) {
           <h2 className="text-xl font-semibold text-white mb-2">
             Something went wrong
           </h2>
-          <p className="text-gray-400 mb-6">
-            {error}
-          </p>
+          <p className="text-gray-400 mb-6">{error}</p>
           <Button
             onClick={() => refreshData()}
             className="w-full bg-red-600 hover:bg-red-700"

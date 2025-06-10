@@ -247,103 +247,103 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
         }
       }
 
-        // Fetch current stats
-        debugLog("Fetching current stats...");
-        const { data: currentStatsData, error: statsError } = await supabase
-          .from("current_stats")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
+      // Fetch current stats
+      debugLog("Fetching current stats...");
+      const { data: currentStatsData, error: statsError } = await supabase
+        .from("current_stats")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-        if (statsError && statsError.code !== "PGRST116") {
-          errorLog("Error fetching current stats", statsError);
-          throw new Error(`Failed to fetch current stats: ${statsError.message}`);
-        }
-        debugLog("Current stats fetched successfully");
+      if (statsError && statsError.code !== "PGRST116") {
+        errorLog("Error fetching current stats", statsError);
+        throw new Error(`Failed to fetch current stats: ${statsError.message}`);
+      }
+      debugLog("Current stats fetched successfully");
 
-        // Fetch active meet
-        debugLog("Fetching active meet...");
-        const { data: meetData, error: meetError } = await supabase
-          .from("meets")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .maybeSingle();
+      // Fetch active meet
+      debugLog("Fetching active meet...");
+      const { data: meetData, error: meetError } = await supabase
+        .from("meets")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .maybeSingle();
 
-        if (meetError && meetError.code !== "PGRST116") {
-          errorLog("Error fetching meet data", meetError);
-          throw new Error(`Failed to fetch meet data: ${meetError.message}`);
-        }
-        debugLog("Meet data fetched successfully");
+      if (meetError && meetError.code !== "PGRST116") {
+        errorLog("Error fetching meet data", meetError);
+        throw new Error(`Failed to fetch meet data: ${meetError.message}`);
+      }
+      debugLog("Meet data fetched successfully");
 
-        // Fetch meet goals
-        debugLog("Fetching meet goals...");
-        const { data: meetGoalsData, error: goalsError } = await supabase
-          .from("meet_goals")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("meet_id", meetData?.id || "00000000-0000-0000-0000-000000000000");
+      // Fetch meet goals
+      debugLog("Fetching meet goals...");
+      const { data: meetGoalsData, error: goalsError } = await supabase
+        .from("meet_goals")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("meet_id", meetData?.id || "00000000-0000-0000-0000-000000000000");
 
-        if (goalsError && goalsError.code !== "PGRST116") {
-          errorLog("Error fetching meet goals", goalsError);
-          throw new Error(`Failed to fetch meet goals: ${goalsError.message}`);
-        }
-        debugLog("Meet goals fetched successfully");
+      if (goalsError && goalsError.code !== "PGRST116") {
+        errorLog("Error fetching meet goals", goalsError);
+        throw new Error(`Failed to fetch meet goals: ${goalsError.message}`);
+      }
+      debugLog("Meet goals fetched successfully");
 
-        // Fetch weight history
-        debugLog("Fetching weight history...");
-        const { data: weightHistoryData, error: weightError } = await supabase
-          .from("weight_history")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("date", { ascending: false })
-          .limit(30);
+      // Fetch weight history
+      debugLog("Fetching weight history...");
+      const { data: weightHistoryData, error: weightError } = await supabase
+        .from("weight_history")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("date", { ascending: false })
+        .limit(30);
 
-        if (weightError && weightError.code !== "PGRST116") {
-          errorLog("Error fetching weight history", weightError);
-          throw new Error(
-            `Failed to fetch weight history: ${weightError.message}`,
+      if (weightError && weightError.code !== "PGRST116") {
+        errorLog("Error fetching weight history", weightError);
+        throw new Error(
+          `Failed to fetch weight history: ${weightError.message}`,
+        );
+      }
+      debugLog("Weight history fetched successfully");
+
+      // Fetch equipment checklist
+      debugLog("Fetching equipment checklist...");
+      const { data: equipmentData, error: equipmentError } = await supabase
+        .from("equipment_checklist")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (equipmentError && equipmentError.code !== "PGRST116") {
+        errorLog("Error fetching equipment checklist", equipmentError);
+        throw new Error(
+          `Failed to fetch equipment checklist: ${equipmentError.message}`,
+        );
+      }
+      debugLog("Equipment checklist fetched successfully");
+
+      // Initialize default equipment if none exists
+      let finalEquipmentData = equipmentData;
+      if (!equipmentData || equipmentData.length === 0) {
+        debugLog("No equipment found, initializing defaults...");
+        try {
+          await initializeDefaultEquipment();
+          // Refetch equipment after initialization
+          const { data: newEquipmentData } = await supabase
+            .from("equipment_checklist")
+            .select("*")
+            .eq("user_id", user.id);
+          finalEquipmentData = newEquipmentData;
+          debugLog("Default equipment initialized successfully");
+        } catch (equipmentInitError) {
+          errorLog(
+            "Failed to initialize default equipment",
+            equipmentInitError,
           );
+          // Continue with default equipment from constants
+          finalEquipmentData = [];
         }
-        debugLog("Weight history fetched successfully");
-
-        // Fetch equipment checklist
-        debugLog("Fetching equipment checklist...");
-        const { data: equipmentData, error: equipmentError } = await supabase
-          .from("equipment_checklist")
-          .select("*")
-          .eq("user_id", user.id);
-
-        if (equipmentError && equipmentError.code !== "PGRST116") {
-          errorLog("Error fetching equipment checklist", equipmentError);
-          throw new Error(
-            `Failed to fetch equipment checklist: ${equipmentError.message}`,
-          );
-        }
-        debugLog("Equipment checklist fetched successfully");
-
-        // Initialize default equipment if none exists
-        let finalEquipmentData = equipmentData;
-        if (!equipmentData || equipmentData.length === 0) {
-          debugLog("No equipment found, initializing defaults...");
-          try {
-            await initializeDefaultEquipment();
-            // Refetch equipment after initialization
-            const { data: newEquipmentData } = await supabase
-              .from("equipment_checklist")
-              .select("*")
-              .eq("user_id", user.id);
-            finalEquipmentData = newEquipmentData;
-            debugLog("Default equipment initialized successfully");
-          } catch (equipmentInitError) {
-            errorLog(
-              "Failed to initialize default equipment",
-              equipmentInitError,
-            );
-            // Continue with default equipment from constants
-            finalEquipmentData = [];
-          }
-        }
+      }
 
       // Transform and set data
       const newState: PowerliftingState = {
@@ -654,7 +654,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Add weight entry to Supabase
+  // Add weight entry to Supabase (using upsert to avoid duplicates)
   const addWeightEntry = async (entry: WeightEntry) => {
     if (!user?.id) {
       errorLog("No user found when adding weight entry", null);
@@ -662,21 +662,27 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Adding weight entry...");
-      const { error } = await supabase.from("weight_history").insert({
-        user_id: user.id,
-        weight: entry.weight,
-        date: entry.date,
-      });
+      debugLog("Adding/updating weight entry...");
+      const { error } = await supabase.from("weight_history").upsert(
+        {
+          user_id: user.id,
+          weight: entry.weight,
+          date: entry.date,
+        },
+        {
+          onConflict: "user_id,date",
+        },
+      );
 
       if (error) {
         throw new Error(`Failed to add weight entry: ${error.message}`);
       }
 
-      debugLog("Successfully added weight entry");
+      debugLog("Successfully added/updated weight entry");
       dispatch({ type: "ADD_WEIGHT_ENTRY", payload: entry });
     } catch (err: any) {
       errorLog("Error adding weight entry", err);
+      throw err; // Re-throw to handle in calling function
     }
   };
 
@@ -727,6 +733,13 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
       };
 
       await saveCurrentStats(updatedStats);
+
+      // Also add to weight history using upsert
+      await addWeightEntry({
+        date: new Date().toISOString().split("T")[0],
+        weight: weight,
+      });
+
       debugLog("Successfully updated current weight");
     } catch (err: any) {
       errorLog("Error updating current weight", err);

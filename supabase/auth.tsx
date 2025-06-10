@@ -262,18 +262,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    authLog("Starting sign out process");
     setLoading(true);
     try {
-      console.log("Starting sign out process...");
-
       // Sign out from Supabase first
+      authLog("Calling supabase.auth.signOut");
       const { error } = await supabase.auth.signOut({ scope: "global" });
       if (error) {
-        console.error("Supabase sign out error:", error.message);
+        authError("Supabase sign out error", error);
+      } else {
+        authLog("Supabase sign out successful");
       }
 
       // Clear all storage
       try {
+        authLog("Clearing browser storage");
         // Clear specific Supabase keys
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -282,28 +285,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             keysToRemove.push(key);
           }
         }
+        authLog(`Found ${keysToRemove.length} Supabase keys to remove`);
         keysToRemove.forEach((key) => localStorage.removeItem(key));
 
         // Clear session storage
         sessionStorage.clear();
 
-        console.log("Storage cleared successfully");
+        authLog("Storage cleared successfully");
       } catch (storageError) {
-        console.warn("Error clearing storage:", storageError);
+        authError("Error clearing storage", storageError);
       }
 
       // Clear local state
+      authLog("Clearing local auth state");
       setUser(null);
       setUserProfile(null);
 
-      console.log("Sign out completed");
+      authLog("Sign out completed successfully");
     } catch (error: any) {
-      console.error("Unexpected sign out error:", error.message);
+      authError("Unexpected sign out error", error);
       // Still clear local state even if there's an error
       setUser(null);
       setUserProfile(null);
     } finally {
       setLoading(false);
+      authLog("Sign out process finished");
     }
   };
 

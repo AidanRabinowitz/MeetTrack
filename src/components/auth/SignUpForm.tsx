@@ -20,13 +20,15 @@ export default function SignUpForm() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(""); // Clear previous errors
+    setError("");
+    setIsLoading(true);
 
     // Client-side validation
     if (!email || !password || !fullName) {
@@ -37,6 +39,7 @@ export default function SignUpForm() {
         description: message,
         variant: "destructive",
       });
+      setIsLoading(false);
       return;
     }
 
@@ -48,6 +51,7 @@ export default function SignUpForm() {
         description: message,
         variant: "destructive",
       });
+      setIsLoading(false);
       return;
     }
 
@@ -55,7 +59,8 @@ export default function SignUpForm() {
       await signUp(email, password, fullName);
       toast({
         title: "Account created successfully",
-        description: "Please check your email to verify your account before signing in.",
+        description:
+          "Please check your email to verify your account before signing in.",
         variant: "default",
       });
       navigate("/login");
@@ -73,6 +78,8 @@ export default function SignUpForm() {
         description: message,
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -123,8 +130,15 @@ export default function SignUpForm() {
                 <p className="text-sm text-red-600 font-medium">{error}</p>
               </div>
             )}
-            <Button type="submit" className="w-full">
-              Create account
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Creating account...
+                </div>
+              ) : (
+                "Create account"
+              )}
             </Button>
           </form>
         </CardContent>

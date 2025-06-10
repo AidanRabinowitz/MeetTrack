@@ -56,8 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       try {
         // Get initial session
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
         if (error) {
           console.error("Error getting session:", error.message);
         }
@@ -90,14 +93,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           const profile = await fetchUserProfile(session.user.id);
           setUserProfile(profile);
         } else {
           setUserProfile(null);
         }
-        
+
         if (initializing) {
           setInitializing(false);
         }
@@ -117,14 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // Check if user already exists in auth.users
-      const { data: existingUser } = await supabase.auth.admin.getUserByEmail(email).catch(() => ({ data: null }));
-      
-      if (existingUser?.user) {
-        throw new Error("An account already exists with that email address.");
-      }
-
-      // Sign up with Supabase Auth
+      // Sign up with Supabase Auth - removed admin API call
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -148,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error("Please enter a valid email address.");
         }
         if (error.message.includes("weak password")) {
-          throw new Error("Password is too weak. Please choose a stronger password.");
+          throw new Error(
+            "Password is too weak. Please choose a stronger password.",
+          );
         }
         throw error;
       }
@@ -175,10 +173,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
-          throw new Error("Invalid email or password. Please check your credentials and try again.");
+          throw new Error(
+            "Invalid email or password. Please check your credentials and try again.",
+          );
         }
         if (error.message.includes("Email not confirmed")) {
-          throw new Error("Please check your email and click the confirmation link before signing in.");
+          throw new Error(
+            "Please check your email and click the confirmation link before signing in.",
+          );
         }
         throw error;
       }
@@ -198,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear local state first for immediate UI feedback
       setUser(null);
       setUserProfile(null);
-      
+
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error("Sign out error:", error.message);

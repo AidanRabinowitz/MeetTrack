@@ -128,23 +128,18 @@ export default function WeightManagement() {
 
     setSaving(true);
     try {
-      const weightEntry = {
-        date: new Date().toISOString().split("T")[0],
-        weight: parseFloat(newWeight),
-      };
+      const newWeightValue = parseFloat(newWeight);
 
-      await addWeightEntry(weightEntry);
-      await saveCurrentStats({
-        ...state.currentStats,
-        weight: parseFloat(newWeight),
-      });
+      // Use updateCurrentWeight which handles both current stats and weight history with upsert
+      await updateCurrentWeight(newWeightValue);
 
       setNewWeight("");
       toast({
         title: "Weight logged!",
-        description: `Weight of ${newWeight}kg has been recorded.`,
+        description: `Weight of ${newWeightValue}kg has been recorded.`,
       });
     } catch (error) {
+      console.error("Error logging weight:", error);
       toast({
         title: "Error logging weight",
         description: "Please try again.",
@@ -218,16 +213,9 @@ export default function WeightManagement() {
     setSaving(true);
     try {
       const newWeightValue = parseFloat(tempWeight);
-      await saveCurrentStats({
-        ...state.currentStats,
-        weight: newWeightValue,
-      });
 
-      // Also add to weight history
-      await addWeightEntry({
-        date: new Date().toISOString().split("T")[0],
-        weight: newWeightValue,
-      });
+      // Use updateCurrentWeight which handles both current stats and weight history
+      await updateCurrentWeight(newWeightValue);
 
       setEditingWeight(false);
       toast({
@@ -235,6 +223,7 @@ export default function WeightManagement() {
         description: `Current weight set to ${tempWeight}kg.`,
       });
     } catch (error) {
+      console.error("Error updating weight:", error);
       toast({
         title: "Error updating weight",
         description: "Please try again.",

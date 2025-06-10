@@ -55,21 +55,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        // Get initial session
-        const {
-          data: { session },
-          error,
-        } = await supabase.auth.getSession();
+        setLoading(true);
 
-        if (error) {
-          console.error("Error getting session:", error.message);
+        // Get initial session with retry logic
+        let session = null;
+        let sessionError = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const result = await supabase.auth.getSession();
+          if (result.error) {
+            sessionError = result.error;
+            console.warn(
+              `Session attempt ${attempt + 1} failed:`,
+              result.error.message,
+            );
+            if (attempt < 2) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 1000 * (attempt + 1)),
+              );
+            }
+          } else {
+            session = result.data.session;
+            sessionError = null;
+            break;
+          }
+        }
+
+        if (sessionError) {
+          console.error(
+            "Failed to get session after retries:",
+            sessionError.message,
+          );
+          // Clear any stale session data
+          try {
+            localStorage.removeItem("supabase.auth.token");
+            sessionStorage.clear();
+          } catch (e) {
+            console.warn("Error clearing storage:", e);
+          }
         }
 
         if (mounted) {
           setUser(session?.user ?? null);
           if (session?.user) {
-            const profile = await fetchUserProfile(session.user.id);
-            setUserProfile(profile);
+            try {
+              const profile = await fetchUserProfile(session.user.id);
+              setUserProfile(profile);
+            } catch (profileError: any) {
+              console.error(
+                "Error fetching user profile:",
+                profileError.message,
+              );
+              // Don't fail auth if profile fetch fails
+              setUserProfile(null);
+            }
+          } else {
+            setUserProfile(null);
           }
           setLoading(false);
           setInitializing(false);
@@ -77,6 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err: any) {
         console.error("Error initializing auth:", err.message);
         if (mounted) {
+          setUser(null);
+          setUserProfile(null);
           setLoading(false);
           setInitializing(false);
         }
@@ -91,12 +134,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
+      console.log(
+        "Auth state change:",
+        event,
+        session?.user?.id ? "User present" : "No user",
+      );
+
       try {
+        // Handle sign out event specifically
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
-          setUserProfile(profile);
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            setUserProfile(profile);
+          } catch (profileError: any) {
+            console.error(
+              "Error fetching user profile in auth change:",
+              profileError.message,
+            );
+            setUserProfile(null);
+          }
         } else {
           setUserProfile(null);
         }
@@ -107,6 +172,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       } catch (err: any) {
         console.error("Error in auth state change:", err.message);
+        setUser(null);
+        setUserProfile(null);
         setLoading(false);
       }
     });
@@ -197,26 +264,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     setLoading(true);
     try {
-      // Clear local state first for immediate UI feedback
-      setUser(null);
-      setUserProfile(null);
+      console.log("Starting sign out process...");
 
-      // Clear localStorage to remove any cached auth tokens
+      // Sign out from Supabase first
+      const { error } = await supabase.auth.signOut({ scope: "global" });
+      if (error) {
+        console.error("Supabase sign out error:", error.message);
+      }
+
+      // Clear all storage
       try {
-        localStorage.clear();
-        // Also clear sessionStorage as a precaution
+        // Clear specific Supabase keys
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("supabase")) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+        // Clear session storage
         sessionStorage.clear();
+
+        console.log("Storage cleared successfully");
       } catch (storageError) {
         console.warn("Error clearing storage:", storageError);
       }
 
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Sign out error:", error.message);
-        // Don't throw here - user state is already cleared
-      }
+      // Clear local state
+      setUser(null);
+      setUserProfile(null);
+
+      console.log("Sign out completed");
     } catch (error: any) {
       console.error("Unexpected sign out error:", error.message);
+      // Still clear local state even if there's an error
+      setUser(null);
+      setUserProfile(null);
     } finally {
       setLoading(false);
     }

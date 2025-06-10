@@ -24,14 +24,15 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading...</p>
+          <p className="text-gray-400">Checking authentication...</p>
         </div>
       </div>
     );
   }
 
   if (!user) {
-    return <Navigate to="/" />;
+    console.log("No user found, redirecting to home");
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

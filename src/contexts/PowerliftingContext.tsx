@@ -725,18 +725,24 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Updating current weight...");
+      debugLog("Updating current weight", {
+        newWeight: weight,
+        previousWeight: state.currentStats.weight,
+      });
 
       const updatedStats = {
         ...state.currentStats,
         weight: weight,
       };
 
+      debugLog("Saving updated current stats");
       await saveCurrentStats(updatedStats);
 
       // Also add to weight history using upsert
+      const today = new Date().toISOString().split("T")[0];
+      debugLog("Adding weight entry to history", { date: today, weight });
       await addWeightEntry({
-        date: new Date().toISOString().split("T")[0],
+        date: today,
         weight: weight,
       });
 

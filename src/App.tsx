@@ -68,7 +68,6 @@ function AppRoutes() {
 }
 
 function App() {
-  <AuthDebugInfo/>
   return (
     <ErrorBoundary>
       <BrowserRouter>
@@ -84,6 +83,8 @@ function App() {
                 </div>
               }
             >
+                <AuthDebugInfo/>
+
               <AppRoutes />
             </Suspense>
             <Toaster />

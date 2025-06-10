@@ -185,50 +185,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [initializing]);
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    setLoading(true);
-    try {
-      // Sign up with Supabase Auth - removed admin API call
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
-
-      if (error) {
-        // Handle specific error cases
-        if (
-          error.message.includes("already registered") ||
-          error.message.includes("already exists") ||
-          error.message.includes("User already registered")
-        ) {
-          throw new Error("An account already exists with that email address.");
-        }
-        if (error.message.includes("invalid email")) {
-          throw new Error("Please enter a valid email address.");
-        }
-        if (error.message.includes("weak password")) {
-          throw new Error(
-            "Password is too weak. Please choose a stronger password.",
-          );
-        }
-        throw error;
+  setLoading(true);
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/auth/callback`
       }
+    });
 
-      // Success - user created
-      if (data.user && !data.user.email_confirmed_at) {
-        // Email confirmation required
-        return;
-      }
-    } catch (error: any) {
-      throw error;
-    } finally {
-      setLoading(false);
+    if (error) throw error;
+
+    // Return the user if email confirmation isn't required
+    if (data.user && !data.user.email_confirmed_at) {
+      return { requiresConfirmation: true };
     }
-  };
+
+    return data.user;
+  } catch (error) {
+    throw error;
+  } finally {
+    setLoading(false);
+  }
+};
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);
@@ -262,56 +243,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    authLog("Starting sign out process");
-    setLoading(true);
-    try {
-      // Sign out from Supabase first
-      authLog("Calling supabase.auth.signOut");
-      const { error } = await supabase.auth.signOut({ scope: "global" });
-      if (error) {
-        authError("Supabase sign out error", error);
-      } else {
-        authLog("Supabase sign out successful");
-      }
-
-      // Clear all storage
-      try {
-        authLog("Clearing browser storage");
-        // Clear specific Supabase keys
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith("supabase")) {
-            keysToRemove.push(key);
-          }
-        }
-        authLog(`Found ${keysToRemove.length} Supabase keys to remove`);
-        keysToRemove.forEach((key) => localStorage.removeItem(key));
-
-        // Clear session storage
-        sessionStorage.clear();
-
-        authLog("Storage cleared successfully");
-      } catch (storageError) {
-        authError("Error clearing storage", storageError);
-      }
-
-      // Clear local state
-      authLog("Clearing local auth state");
-      setUser(null);
-      setUserProfile(null);
-
-      authLog("Sign out completed successfully");
-    } catch (error: any) {
-      authError("Unexpected sign out error", error);
-      // Still clear local state even if there's an error
-      setUser(null);
-      setUserProfile(null);
-    } finally {
-      setLoading(false);
-      authLog("Sign out process finished");
-    }
-  };
+  setLoading(true);
+  try {
+    // Sign out from Supabase
+    const { error } = await supabase.auth.signOut({ scope: "global" });
+    
+    // Clear all browser storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Clear Supabase client cache
+    await supabase.auth._removeSession();
+    
+    // Reset local state
+    setUser(null);
+    setUserProfile(null);
+  } catch (error) {
+    console.error("Sign out error:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <AuthContext.Provider

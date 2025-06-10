@@ -82,7 +82,7 @@ export function AuthDebugInfo() {
           cursor: 'pointer'
         }}
       >
-        Clear Auth & Reload
+        Clear Auth & Reloadd
       </button>
     </div>
   );

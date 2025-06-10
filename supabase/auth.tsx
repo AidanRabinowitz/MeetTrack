@@ -79,11 +79,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        // Get the current session
-        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log("Initializing auth...");
         
+        // Get the current session with timeout
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 10000)
+        );
+        
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise, 
+          timeoutPromise
+        ]) as any;
+        
+        if (!mounted) return;
+
         if (error) {
           console.error("Session error:", error);
+          // Clear potentially corrupted session
+          await supabase.auth.signOut();
           if (mounted) {
             setUser(null);
             setUserProfile(null);
@@ -92,7 +106,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (session?.user && mounted) {
+        console.log("Session found:", !!session?.user, session?.user?.id);
+
+        if (session?.user) {
+          // Verify session is still valid by making a test query
+          const { error: testError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', session.user.id)
+            .single();
+
+          if (testError) {
+            console.error("Session validation failed:", testError);
+            await supabase.auth.signOut();
+            if (mounted) {
+              setUser(null);
+              setUserProfile(null);
+              setLoading(false);
+            }
+            return;
+          }
+
           // Fetch or create user profile
           let profile = await fetchUserProfile(session.user.id);
           
@@ -110,6 +144,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         console.error("Auth initialization error:", err);
+        // Clear session on any error
+        await supabase.auth.signOut();
         if (mounted) {
           setUser(null);
           setUserProfile(null);

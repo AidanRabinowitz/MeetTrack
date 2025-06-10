@@ -18,16 +18,22 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setIsLoading(true);
+
     try {
       await signIn(email, password);
-      navigate("/");
-    } catch (error) {
-      setError("Invalid email or password");
+      navigate("/dashboard");
+    } catch (error: any) {
+      setError(error.message || "Invalid email or password");
+    } finally {
+      setIsLoading(false);
     }
   };
 

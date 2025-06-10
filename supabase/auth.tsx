@@ -51,165 +51,157 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-    const initializeAuth = async () => {
-      try {
-        setLoading(true);
-
-        // Get initial session with retry logic
-        let session = null;
-        let sessionError = null;
-
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const result = await supabase.auth.getSession();
-          if (result.error) {
-            sessionError = result.error;
-            console.warn(
-              `Session attempt ${attempt + 1} failed:`,
-              result.error.message,
-            );
-            if (attempt < 2) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, 1000 * (attempt + 1)),
-              );
-            }
-          } else {
-            session = result.data.session;
-            sessionError = null;
-            break;
-          }
-        }
-
-        if (sessionError) {
-          console.error(
-            "Failed to get session after retries:",
-            sessionError.message,
-          );
-          // Clear any stale session data
-          try {
-            localStorage.removeItem("supabase.auth.token");
-            sessionStorage.clear();
-          } catch (e) {
-            console.warn("Error clearing storage:", e);
-          }
-        }
-
-        if (mounted) {
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            try {
-              const profile = await fetchUserProfile(session.user.id);
-              setUserProfile(profile);
-            } catch (profileError: any) {
-              console.error(
-                "Error fetching user profile:",
-                profileError.message,
-              );
-              // Don't fail auth if profile fetch fails
-              setUserProfile(null);
-            }
-          } else {
-            setUserProfile(null);
-          }
-          setLoading(false);
-          setInitializing(false);
-        }
-      } catch (err: any) {
-        console.error("Error initializing auth:", err.message);
-        if (mounted) {
-          setUser(null);
-          setUserProfile(null);
-          setLoading(false);
-          setInitializing(false);
-        }
-      }
-    };
-
-    initializeAuth();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+  const initializeAuth = async () => {
+    try {
+      setLoading(true);
+      
+      // 1. Get session with retry logic
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
       if (!mounted) return;
 
-      console.log(
-        "Auth state change:",
-        event,
-        session?.user?.id ? "User present" : "No user",
-      );
-
-      try {
-        // Handle sign out event specifically
-        if (event === "SIGNED_OUT") {
-          setUser(null);
-          setUserProfile(null);
-          setLoading(false);
-          return;
-        }
-
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            setUserProfile(profile);
-          } catch (profileError: any) {
-            console.error(
-              "Error fetching user profile in auth change:",
-              profileError.message,
-            );
-            setUserProfile(null);
-          }
-        } else {
-          setUserProfile(null);
-        }
-
-        if (initializing) {
-          setInitializing(false);
-        }
-        setLoading(false);
-      } catch (err: any) {
-        console.error("Error in auth state change:", err.message);
+      if (error) {
+        console.error("Session error:", error);
+        await supabase.auth.signOut();
         setUser(null);
         setUserProfile(null);
+        return;
+      }
+
+      // 2. Verify user exists in both tables
+      if (session?.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          // Auto-create profile if missing
+          const { error: upsertError } = await supabase.from('users').upsert({
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+          if (upsertError) throw upsertError;
+        }
+
+        if (mounted) {
+          setUser(session.user);
+          setUserProfile(profile || {
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } else if (mounted) {
+        setUser(null);
+        setUserProfile(null);
+      }
+    } catch (err) {
+      console.error("Auth init error:", err);
+      if (mounted) {
+        setUser(null);
+        setUserProfile(null);
+      }
+      await supabase.auth.signOut();
+    } finally {
+      if (mounted) {
         setLoading(false);
+        setInitializing(false);
       }
-    });
+    }
+  };
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [initializing]);
+  initializeAuth();
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-  setLoading(true);
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`
-      }
-    });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    if (!mounted) return;
 
-    if (error) throw error;
-
-    // Return the user if email confirmation isn't required
-    if (data.user && !data.user.email_confirmed_at) {
-      return { requiresConfirmation: true };
+    // Handle specific events
+    if (event === 'SIGNED_OUT') {
+      setUser(null);
+      setUserProfile(null);
+      return;
     }
 
-    return data.user;
-  } catch (error) {
-    throw error;
-  } finally {
-    setLoading(false);
-  }
-};
+    if (session?.user) {
+      // Double-check profile existence
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      setUser(session.user);
+      setUserProfile(profile || {
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.user_metadata?.full_name || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    }
+  });
+
+  return () => {
+    mounted = false;
+    subscription?.unsubscribe();
+  };
+}, []);
+
+  const signUp = async (email: string, password: string, fullName: string) => {
+    setLoading(true);
+    try {
+      // Sign up with Supabase Auth - removed admin API call
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (error) {
+        // Handle specific error cases
+        if (
+          error.message.includes("already registered") ||
+          error.message.includes("already exists") ||
+          error.message.includes("User already registered")
+        ) {
+          throw new Error("An account already exists with that email address.");
+        }
+        if (error.message.includes("invalid email")) {
+          throw new Error("Please enter a valid email address.");
+        }
+        if (error.message.includes("weak password")) {
+          throw new Error(
+            "Password is too weak. Please choose a stronger password.",
+          );
+        }
+        throw error;
+      }
+
+      // Success - user created
+      if (data.user && !data.user.email_confirmed_at) {
+        // Email confirmation required
+        return;
+      }
+    } catch (error: any) {
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     setLoading(true);

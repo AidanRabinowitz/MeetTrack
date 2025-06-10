@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useRoutes } from "react-router-dom";
 import routes from "tempo-routes";
 import LoginForm from "./components/auth/LoginForm";
@@ -15,7 +15,21 @@ import { Toaster } from "./components/ui/toaster";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import OfflineIndicator from "./components/common/OfflineIndicator";
 import PWAInstallPrompt from "./components/common/PWAInstallPrompt";
+import { supabase } from "../supabase/supabase";
 
+
+// Add this to your root component or router
+useEffect(() => {
+  const handleVisibilityChange = async () => {
+    if (document.visibilityState === 'visible') {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) await supabase.auth.signOut();
+    }
+  };
+
+  window.addEventListener('visibilitychange', handleVisibilityChange);
+  return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
+}, []);
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 

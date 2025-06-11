@@ -25,6 +25,7 @@ type AuthContextType = {
   signUp: (email: string, password: string, fullName: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  debugAuthState?: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,12 +41,66 @@ const errorLog = (message: string, error?: any) => {
   console.error(`[AUTH ERROR] ${message}`, error || "");
 };
 
+// Handle URL hash tokens (for email confirmation redirects)
+const handleUrlHashTokens = async () => {
+  const hash = window.location.hash;
+  if (hash && hash.includes('access_token')) {
+    debugLog("Found URL hash with tokens, processing...");
+    
+    try {
+      // Extract tokens from URL hash
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      const type = params.get('type');
+      
+      debugLog("URL hash params", { type, hasAccessToken: !!accessToken, hasRefreshToken: !!refreshToken });
+      
+      if (accessToken && refreshToken) {
+        // Set the session using the tokens from URL
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        
+        if (error) {
+          errorLog("Error setting session from URL tokens", error);
+          throw error;
+        }
+        
+        debugLog("Successfully set session from URL tokens");
+        
+        // Clean up the URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Redirect based on type
+        if (type === 'signup') {
+          debugLog("Signup confirmation complete, redirecting to dashboard");
+          window.location.href = '/dashboard';
+        } else {
+          debugLog("Login confirmation complete, redirecting to dashboard");
+          window.location.href = '/dashboard';
+        }
+        
+        return true;
+      }
+    } catch (error) {
+      errorLog("Error processing URL hash tokens", error);
+      // Clean up the URL even if there's an error
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return false;
+    }
+  }
+  return false;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
+
   const debugAuthState = useCallback(async () => {
     console.group("🔍 Auth Debug Information");
     console.log("React State:", {
@@ -90,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     console.groupEnd();
   }, [user, userProfile, loading, initialized, session]);
+
   const fetchUserProfile = useCallback(
     async (userId: string): Promise<UserProfile | null> => {
       try {
@@ -115,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
   // Clear auth storage function
   const clearAuthStorage = useCallback(async () => {
     debugLog("Clearing auth storage");
@@ -156,6 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, []);
+
   const createUserProfile = useCallback(
     async (user: User): Promise<UserProfile | null> => {
       try {
@@ -199,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // Refresh session function
+  // Refresh session function with retry logic
   const refreshSession = useCallback(async () => {
     try {
       debugLog("Refreshing session...");
@@ -240,31 +298,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearAuthStorage, fetchUserProfile, createUserProfile]);
 
-  // Initialize auth state
+  // Initialize auth state with retry logic
   useEffect(() => {
     let mounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
 
     const initializeAuth = async () => {
       try {
         debugLog("Initializing auth...");
         setLoading(true);
 
-        // Get the current session
-        const {
-          data: { session: currentSession },
-          error,
-        } = await supabase.auth.getSession();
+        // First, check for URL hash tokens (email confirmation)
+        const handledUrlTokens = await handleUrlHashTokens();
+        if (handledUrlTokens) {
+          debugLog("URL tokens handled, auth initialization will continue via redirect");
+          return;
+        }
+
+        // Get the current session with retry logic
+        let sessionResult;
+        let sessionError;
+        
+        for (let i = 0; i <= maxRetries; i++) {
+          try {
+            sessionResult = await supabase.auth.getSession();
+            sessionError = sessionResult.error;
+            if (!sessionError) break;
+            
+            if (i < maxRetries) {
+              debugLog(`Session fetch attempt ${i + 1} failed, retrying...`, sessionError);
+              await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+            }
+          } catch (err) {
+            sessionError = err;
+            if (i < maxRetries) {
+              debugLog(`Session fetch attempt ${i + 1} failed with exception, retrying...`, err);
+              await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+            }
+          }
+        }
 
         if (!mounted) return;
 
-        if (error) {
-          errorLog("Session initialization error", error);
+        if (sessionError) {
+          errorLog("Session initialization error after retries", sessionError);
           await clearAuthStorage();
           setUser(null);
           setUserProfile(null);
           setSession(null);
           return;
         }
+
+        const currentSession = sessionResult?.data?.session;
 
         if (currentSession) {
           debugLog("Found existing session", {
@@ -282,37 +368,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          // Validate session with a test query
-          try {
-            const { error: validationError } = await supabase
-              .from("users")
-              .select("id")
-              .eq("id", currentSession.user.id)
-              .limit(1)
-              .single();
+          // Validate session with a test query (with retry)
+          let validationError;
+          for (let i = 0; i <= maxRetries; i++) {
+            try {
+              const { error } = await supabase
+                .from("users")
+                .select("id")
+                .eq("id", currentSession.user.id)
+                .limit(1)
+                .single();
 
-            if (validationError && validationError.code !== "PGRST116") {
-              debugLog(
-                "Session validation failed, clearing auth",
-                validationError,
-              );
-              await clearAuthStorage();
-              setUser(null);
-              setUserProfile(null);
-              setSession(null);
-              return;
+              validationError = error;
+              if (!validationError || validationError.code === "PGRST116") {
+                break; // Success or "no rows" error is acceptable
+              }
+              
+              if (i < maxRetries) {
+                debugLog(`Session validation attempt ${i + 1} failed, retrying...`, validationError);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+              }
+            } catch (err) {
+              validationError = err;
+              if (i < maxRetries) {
+                debugLog(`Session validation attempt ${i + 1} failed with exception, retrying...`, err);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+              }
             }
-          } catch (validationErr) {
-            debugLog(
-              "Session validation error, continuing anyway",
-              validationErr,
-            );
           }
 
-          // Fetch or create user profile
-          const profile =
-            (await fetchUserProfile(currentSession.user.id)) ||
-            (await createUserProfile(currentSession.user));
+          if (validationError && validationError.code !== "PGRST116") {
+            debugLog("Session validation failed after retries, clearing auth", validationError);
+            await clearAuthStorage();
+            setUser(null);
+            setUserProfile(null);
+            setSession(null);
+            return;
+          }
+
+          // Fetch or create user profile (with retry)
+          let profile = null;
+          for (let i = 0; i <= maxRetries; i++) {
+            try {
+              profile = await fetchUserProfile(currentSession.user.id);
+              if (!profile) {
+                profile = await createUserProfile(currentSession.user);
+              }
+              if (profile) break;
+              
+              if (i < maxRetries) {
+                debugLog(`Profile fetch/create attempt ${i + 1} failed, retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+              }
+            } catch (err) {
+              if (i < maxRetries) {
+                debugLog(`Profile fetch/create attempt ${i + 1} failed with exception, retrying...`, err);
+                await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+              }
+            }
+          }
 
           if (mounted) {
             setSession(currentSession);

@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
+const supabaseProjectId = import.meta.env.SUPABASE_PROJECT_ID || "";
+
 type UserProfile = {
   id: string;
   email: string;
@@ -25,27 +27,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [initializing, setInitializing] = useState(true);
+  const debugAuthState = async () => {
+    console.group("Auth Debug Information");
+    console.log("React State:", { user, userProfile, loading });
 
-  const fetchUserProfile = async (userId: string) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    console.log("Supabase Session:", session);
+
+    console.log("LocalStorage Auth Items:");
+    Object.keys(localStorage).forEach((key) => {
+      if (key.includes("auth") || key.startsWith("sb-")) {
+        console.log(key, localStorage.getItem(key));
+      }
+    });
+
+    console.groupEnd();
+  };
+  const fetchUserProfile = async (
+    userId: string,
+  ): Promise<UserProfile | null> => {
     try {
       const { data, error } = await supabase
         .from("users")
         .select("id, email, full_name, created_at, updated_at")
         .eq("id", userId)
-        .maybeSingle();
+        .single();
 
-      if (error && error.code !== "PGRST116") {
-        console.error("Database error fetching user profile:", error.message);
+      if (error) {
+        console.error("Error fetching user profile:", error);
         return null;
       }
 
       return data;
     } catch (err: any) {
-      console.error(
-        "Unexpected error fetching user profile:",
-        err.message || "Unknown error",
-      );
+      console.error("Unexpected error fetching user profile:", err);
+      return null;
+    }
+  };
+  // Add this effect to handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible") {
+        await recoverSession();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+  const createUserProfile = async (user: User): Promise<UserProfile | null> => {
+    try {
+      const profileData = {
+        id: user.id,
+        email: user.email || "",
+        full_name: user.user_metadata?.full_name || "",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from("users")
+        .upsert(profileData)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Error creating user profile:", error);
+        return profileData;
+      }
+
+      return data;
+    } catch (err: any) {
+      console.error("Unexpected error creating user profile:", err);
       return null;
     }
   };
@@ -57,137 +114,143 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setLoading(true);
 
-        // Get initial session with retry logic
-        let session = null;
-        let sessionError = null;
+        // Get the current session
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
 
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const result = await supabase.auth.getSession();
-          if (result.error) {
-            sessionError = result.error;
-            console.warn(
-              `Session attempt ${attempt + 1} failed:`,
-              result.error.message,
-            );
-            if (attempt < 2) {
-              await new Promise((resolve) =>
-                setTimeout(resolve, 1000 * (attempt + 1)),
-              );
-            }
-          } else {
-            session = result.data.session;
-            sessionError = null;
-            break;
-          }
+        if (!mounted) return;
+
+        if (error) {
+          console.error("Session error:", error);
+          await clearAuthStorage();
+          return;
         }
 
-        if (sessionError) {
-          console.error(
-            "Failed to get session after retries:",
-            sessionError.message,
-          );
-          // Clear any stale session data
-          try {
-            localStorage.removeItem("supabase.auth.token");
-            sessionStorage.clear();
-          } catch (e) {
-            console.warn("Error clearing storage:", e);
+        if (session) {
+          // Validate session with a test query
+          const { error: validationError } = await supabase
+            .from("users")
+            .select("id")
+            .eq("id", session.user.id)
+            .single();
+
+          if (validationError) {
+            console.error("Session validation failed:", validationError);
+            await clearAuthStorage();
+            return;
+          }
+
+          // Fetch user profile
+          const profile =
+            (await fetchUserProfile(session.user.id)) ||
+            (await createUserProfile(session.user));
+
+          if (mounted) {
+            setUser(session.user);
+            setUserProfile(profile);
           }
         }
-
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+        await clearAuthStorage();
+      } finally {
         if (mounted) {
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            try {
-              const profile = await fetchUserProfile(session.user.id);
-              setUserProfile(profile);
-            } catch (profileError: any) {
-              console.error(
-                "Error fetching user profile:",
-                profileError.message,
-              );
-              // Don't fail auth if profile fetch fails
-              setUserProfile(null);
-            }
-          } else {
-            setUserProfile(null);
-          }
           setLoading(false);
-          setInitializing(false);
-        }
-      } catch (err: any) {
-        console.error("Error initializing auth:", err.message);
-        if (mounted) {
-          setUser(null);
-          setUserProfile(null);
-          setLoading(false);
-          setInitializing(false);
         }
       }
     };
 
+    // Initialize auth
     initializeAuth();
 
-    // Listen for auth changes
+    // Auth state change listener
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
-      console.log(
-        "Auth state change:",
-        event,
-        session?.user?.id ? "User present" : "No user",
-      );
+      console.log("Auth state changed:", event);
 
-      try {
-        // Handle sign out event specifically
-        if (event === "SIGNED_OUT") {
+      if (event === "SIGNED_OUT") {
+        await clearAuthStorage();
+        if (mounted) {
           setUser(null);
           setUserProfile(null);
+        }
+      } else if (session) {
+        setLoading(true);
+        const profile =
+          (await fetchUserProfile(session.user.id)) ||
+          (await createUserProfile(session.user));
+        if (mounted) {
+          setUser(session.user);
+          setUserProfile(profile);
           setLoading(false);
-          return;
         }
-
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            setUserProfile(profile);
-          } catch (profileError: any) {
-            console.error(
-              "Error fetching user profile in auth change:",
-              profileError.message,
-            );
-            setUserProfile(null);
-          }
-        } else {
-          setUserProfile(null);
-        }
-
-        if (initializing) {
-          setInitializing(false);
-        }
-        setLoading(false);
-      } catch (err: any) {
-        console.error("Error in auth state change:", err.message);
-        setUser(null);
-        setUserProfile(null);
-        setLoading(false);
       }
     });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
-  }, [initializing]);
+  }, []);
+  const clearAuthStorage = async () => {
+    // Clear all Supabase-related localStorage items
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("sb-") || key.includes("auth-token")) {
+        localStorage.removeItem(key);
+      }
+    });
 
+    // Clear cookies that might be set by Supabase
+    document.cookie.split(";").forEach((cookie) => {
+      const [name] = cookie.split("=");
+      if (name.trim().startsWith("sb-")) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      }
+    });
+  };
+
+  const recoverSession = async () => {
+    setLoading(true);
+    try {
+      // Force refresh the session
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        await clearAuthStorage();
+        return false;
+      }
+
+      if (session) {
+        const profile =
+          (await fetchUserProfile(session.user.id)) ||
+          (await createUserProfile(session.user));
+        setUser(session.user);
+        setUserProfile(profile);
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      await clearAuthStorage();
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Call this when your app detects auth state mismatch
+  // For example, in your root layout or main component
   const signUp = async (email: string, password: string, fullName: string) => {
     setLoading(true);
     try {
-      // Sign up with Supabase Auth - removed admin API call
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -199,7 +262,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        // Handle specific error cases
         if (
           error.message.includes("already registered") ||
           error.message.includes("already exists") ||
@@ -218,11 +280,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
-      // Success - user created
-      if (data.user && !data.user.email_confirmed_at) {
-        // Email confirmation required
-        return;
-      }
+      // User created successfully
+      return;
     } catch (error: any) {
       throw error;
     } finally {
@@ -252,7 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
 
-      // Success - user will be set via onAuthStateChange
+      // Success - auth state will be updated via onAuthStateChange
       return;
     } catch (error: any) {
       throw error;
@@ -262,60 +321,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    authLog("Starting sign out process");
     setLoading(true);
     try {
-      // Sign out from Supabase first
-      authLog("Calling supabase.auth.signOut");
-      const { error } = await supabase.auth.signOut({ scope: "global" });
+      // First sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+
       if (error) {
-        authError("Supabase sign out error", error);
-      } else {
-        authLog("Supabase sign out successful");
+        console.error("Sign out error:", error);
+        throw error;
       }
 
-      // Clear all storage
-      try {
-        authLog("Clearing browser storage");
-        // Clear specific Supabase keys
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith("supabase")) {
-            keysToRemove.push(key);
-          }
-        }
-        authLog(`Found ${keysToRemove.length} Supabase keys to remove`);
-        keysToRemove.forEach((key) => localStorage.removeItem(key));
+      // Manually clear all Supabase auth items from localStorage
+      const itemsToRemove = [
+        `sb-${process.env.supabaseProjectId}-auth-token`,
+        `sb-${process.env.supabaseProjectId}-auth-token-expires-at`,
+        `sb-${process.env.supabaseProjectId}-auth-event`,
+      ];
 
-        // Clear session storage
-        sessionStorage.clear();
+      itemsToRemove.forEach((item) => localStorage.removeItem(item));
 
-        authLog("Storage cleared successfully");
-      } catch (storageError) {
-        authError("Error clearing storage", storageError);
-      }
-
-      // Clear local state
-      authLog("Clearing local auth state");
+      // Clear state
       setUser(null);
       setUserProfile(null);
-
-      authLog("Sign out completed successfully");
-    } catch (error: any) {
-      authError("Unexpected sign out error", error);
-      // Still clear local state even if there's an error
-      setUser(null);
-      setUserProfile(null);
+    } catch (error) {
+      console.error("Sign out error:", error);
+      throw error;
     } finally {
       setLoading(false);
-      authLog("Sign out process finished");
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, userProfile, loading, signIn, signUp, signOut }}
+      value={{
+        user,
+        userProfile,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+        debugAuthState,
+      }}
     >
       {children}
     </AuthContext.Provider>

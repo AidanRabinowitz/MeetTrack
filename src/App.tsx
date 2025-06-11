@@ -1,5 +1,11 @@
 import { Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useRoutes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useRoutes,
+} from "react-router-dom";
 import routes from "tempo-routes";
 import LoginForm from "./components/auth/LoginForm";
 import SignUpForm from "./components/auth/SignUpForm";
@@ -15,26 +21,45 @@ import { Toaster } from "./components/ui/toaster";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import OfflineIndicator from "./components/common/OfflineIndicator";
 import PWAInstallPrompt from "./components/common/PWAInstallPrompt";
-import { AuthDebugInfo } from "./debug";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, session, debugAuthState } = useAuth();
 
-  console.log("PrivateRoute - User:", user?.id, "Loading:", loading);
+  // Enhanced debugging for private routes
+  if (import.meta.env.DEV) {
+    console.log("[PrivateRoute] State:", {
+      userId: user?.id || null,
+      loading,
+      sessionExists: !!session,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
+  // Show loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Checking authentication...</p>
+          {import.meta.env.DEV && (
+            <button
+              onClick={debugAuthState}
+              className="mt-4 text-xs text-gray-500 hover:text-gray-300"
+            >
+              Debug Auth State
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    console.log("No user found, redirecting to home");
+  // Redirect if no user
+  if (!user || !session) {
+    if (import.meta.env.DEV) {
+      console.log("[PrivateRoute] No user/session found, redirecting to home");
+    }
     return <Navigate to="/" replace />;
   }
 
@@ -78,13 +103,13 @@ function App() {
                 <div className="min-h-screen bg-gray-900 flex items-center justify-center">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500 mx-auto mb-4"></div>
-                    <p className="text-gray-400">Loading Meet Prep Tracker...</p>
+                    <p className="text-gray-400">
+                      Loading Meet Prep Tracker...
+                    </p>
                   </div>
                 </div>
               }
             >
-                <AuthDebugInfo/>
-
               <AppRoutes />
             </Suspense>
             <Toaster />

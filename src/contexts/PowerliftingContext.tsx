@@ -162,7 +162,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
 
   // Debug logging function - no sensitive data
   const debugLog = (message: string, data?: any) => {
-    if (process.env.NODE_ENV === "development") {
+    if (import.meta.env.DEV) {
       // Only log non-sensitive information
       if (typeof data === "object" && data !== null) {
         // Filter out sensitive fields
@@ -725,7 +725,10 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      debugLog("Updating current weight", { newWeight: weight, previousWeight: state.currentStats.weight });
+      debugLog("Updating current weight", {
+        newWeight: weight,
+        previousWeight: state.currentStats.weight,
+      });
 
       const updatedStats = {
         ...state.currentStats,

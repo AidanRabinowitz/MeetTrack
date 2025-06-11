@@ -21,7 +21,7 @@ import { Toaster } from "./components/ui/toaster";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import OfflineIndicator from "./components/common/OfflineIndicator";
 import PWAInstallPrompt from "./components/common/PWAInstallPrompt";
-
+import { useState } from "react";
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, session, debugAuthState } = useAuth();
   const [retryCount, setRetryCount] = useState(0);
@@ -163,3 +163,5 @@ function App() {
 }
 
 export default App;
+
+

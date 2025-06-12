@@ -531,7 +531,7 @@ export default function Home() {
                 size="lg"
                 className="bg-white text-red-600 hover:bg-gray-100 text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 font-semibold"
               >
-                Start Your Free Trial
+                Sign Up
                 <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
             </Link>

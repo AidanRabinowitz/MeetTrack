@@ -1,98 +1,119 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/tempo.jpg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Download, X } from "lucide-react";
 
-    <!-- SEO Meta Tags -->
-    <title>Meet Prep Tracker - Powerlifting Competition Preparation Tool</title>
-    <meta
-      name="description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day. Free beta version available now."
-    />
-    <meta
-      name="keywords"
-      content="powerlifting, meet prep, competition preparation, squat, bench press, deadlift, weight cutting, equipment checklist"
-    />
-    <meta name="author" content="Meet Prep Tracker" />
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
-    <!-- Open Graph Meta Tags -->
-    <meta
-      property="og:title"
-      content="Meet Prep Tracker - Powerlifting Competition Preparation Tool"
-    />
-    <meta
-      property="og:description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day."
-    />
-    <meta property="og:type" content="website" />
-    <meta
-      property="og:url"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app"
-    />
-    <meta
-      property="og:image"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/tempo.jpg"
-    />
-    <meta property="og:site_name" content="Meet Prep Tracker" />
+export default function PWAInstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
-    <!-- Twitter Card Meta Tags -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:title"
-      content="Meet Prep Tracker - Powerlifting Competition Preparation Tool"
-    />
-    <meta
-      name="twitter:description"
-      content="The complete powerlifting competition preparation tool. Track your lifts, manage your weight cut, and ensure you're ready to dominate on meet day."
-    />
-    <meta
-      name="twitter:image"
-      content="https://keen-tharp3-9pdfc.view-3.tempo-dev.app/tempo.jpg"
-    />
+  useEffect(() => {
+    // Check if app is already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+      return;
+    }
 
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#dc2626" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-    <meta name="apple-mobile-web-app-title" content="Meet Prep Tracker" />
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      
+      // Show prompt after a delay to not be intrusive
+      setTimeout(() => {
+        setShowPrompt(true);
+      }, 30000); // 30 seconds
+    };
 
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setShowPrompt(false);
+      setDeferredPrompt(null);
+    };
 
-    <!-- Apple Touch Icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/tempo.jpg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/tempo.jpg" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/tempo.jpg" />
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
-    <!-- Preconnect to external domains -->
-    <link rel="preconnect" href="https://api.polar.sh" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-    <script src="https://api.tempolabs.ai/proxy-asset?url=https://storage.googleapis.com/tempo-public-assets/error-handling.js"></script>
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
 
-    <!-- PWA Service Worker Registration -->
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("/sw.js")
-            .then((registration) => {
-              console.log("SW registered: ", registration);
-            })
-            .catch((registrationError) => {
-              console.log("SW registration failed: ", registrationError);
-            });
-        });
-      }
-    </script>
-  </body>
-</html>
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    
+    setDeferredPrompt(null);
+    setShowPrompt(false);
+  };
+
+  const handleDismiss = () => {
+    setShowPrompt(false);
+    // Don't show again for this session
+    sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+  };
+
+  // Don't show if already installed or dismissed this session
+  if (isInstalled || !showPrompt || !deferredPrompt || sessionStorage.getItem('pwa-prompt-dismissed')) {
+    return null;
+  }
+
+  return (
+    <div className="fixed bottom-4 left-4 right-4 z-50 md:left-auto md:right-4 md:w-96">
+      <Card className="bg-gray-800 border-gray-700 shadow-lg">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white text-sm flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              Install App
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDismiss}
+              className="text-gray-400 hover:text-white h-6 w-6 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-gray-300 text-sm mb-3">
+            Install Meet Prep Tracker for quick access and offline features.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleInstallClick}
+              size="sm"
+              className="bg-red-600 hover:bg-red-700 text-white flex-1"
+            >
+              Install
+            </Button>
+            <Button
+              onClick={handleDismiss}
+              variant="outline"
+              size="sm"
+              className="border-gray-600 text-gray-300 hover:bg-gray-700 flex-1"
+            >
+              Not Now
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

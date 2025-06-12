@@ -978,32 +978,7 @@ export function PowerliftingProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PowerliftingContext.Provider
-      value={{
-        state,
-        dispatch,
-        loading,
-        error,
-        calculateWilks,
-        calculateDots,
-        getDaysUntilMeet,
-        getProgressPercentage,
-        refreshData,
-        saveCurrentStats,
-        saveMeetGoals,
-        saveMeetInfo,
-        addWeightEntry,
-        toggleEquipmentItem,
-        updateCurrentWeight,
-        updateUnitPreference,
-        saveUserSettings,
-        convertWeight,
-        formatWeight,
-        addTrainingEntry,
-        getTrainingHistory,
-        getTrainingAnalytics,
-      }}
-    >
+    <PowerliftingContext.Provider value={contextValue}>
       {children}
     </PowerliftingContext.Provider>
   );

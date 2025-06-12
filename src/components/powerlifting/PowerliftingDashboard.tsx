@@ -299,7 +299,7 @@ export default function PowerliftingDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-gray-800 border-gray-700 hover:border-gray-600 transition-all duration-200 hover:shadow-lg">
             <CardHeader className="pb-2 p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs sm:text-sm font-medium text-gray-400 truncate">

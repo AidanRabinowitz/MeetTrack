@@ -23,11 +23,16 @@ export default function LoginForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    
     try {
       await signIn(email, password);
-      navigate("/");
-    } catch (error) {
-      setError("Invalid email or password");
+      // Navigate to dashboard after successful login
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      const errorMessage = error?.message || "Invalid email or password";
+      setError(errorMessage);
     }
   };
 
